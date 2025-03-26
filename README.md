@@ -1,21 +1,20 @@
-# Soroban Project
+🚀 Sirius Funding – Deployment Guide
 
-## Project Structure
+Follow these steps to build and deploy the Sirius Funding smart contract to the testnet.
+📂 1. Navigate to the Contract Directory
 
-This repository uses the recommended structure for a Soroban project:
-```text
-.
-├── contracts
-│   └── hello_world
-│       ├── src
-│       │   ├── lib.rs
-│       │   └── test.rs
-│       └── Cargo.toml
-├── Cargo.toml
-└── README.md
-```
+cd contracts/main
 
-- New Soroban contracts can be put in `contracts`, each in their own directory. There is already a `hello_world` contract in there to get you started.
-- If you initialized this project with any other example contracts via `--with-example`, those contracts will be in the `contracts` directory as well.
-- Contracts should have their own `Cargo.toml` files that rely on the top-level `Cargo.toml` workspace for their dependencies.
-- Frontend libraries can be added to the top-level directory as well. If you initialized this project with a frontend template via `--frontend-template` you will have those files already included.
+⚙️ 2. Update the Makefile
+
+Open the Makefile and update the SOURCE flag with your own contract source file.
+📤 3. Deploy the Contract
+
+Run the following command to build and deploy the contract to the testnet:
+
+make deploy
+
+🆔 4. Retrieve the Contract ID
+
+After deployment, the terminal will output the Contract ID.
+You will need this ID to interact with the deployed contract using its functions.
