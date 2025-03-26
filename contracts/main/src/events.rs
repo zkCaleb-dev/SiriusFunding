@@ -2,13 +2,13 @@ use soroban_sdk::{Env, vec, IntoVal, Val, Address, String, symbol_short};
 use crate::storage_types::Project;
 
 // ------ Escrows
-pub (crate) fn escrows_by_engagement_id(e: &Env, engagement_id: String, escrow: Project) {
+pub (crate) fn projects_by_project_id(e: &Env, project_id: String, project: Project) {
     let topics = (symbol_short!("p_by_spdr"),);
     
-    let engagement_id_val: Val = engagement_id.into_val(e);
-    let escrow_val: Val = escrow.into_val(e);
+    let project_id_val: Val = project_id.into_val(e);
+    let project_val: Val = project.into_val(e);
 
-    let event_payload = vec![e, engagement_id_val, escrow_val];
+    let event_payload = vec![e, project_id_val, project_val];
     e.events().publish(topics, event_payload);
 }
 

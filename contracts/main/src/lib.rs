@@ -23,7 +23,7 @@ use soroban_sdk::token::{
 
 mod events;
 
-use crate::events::escrows_by_engagement_id;
+use crate::events::projects_by_project_id;
 use crate::storage_types::{DataKey, Project, ProjectStatus};
 
 #[contract]
@@ -52,6 +52,9 @@ pub enum ContractError {
     NotProjectCreator = 10,
     ProjectExpired = 11,
     AmountTooLarge = 12,
+    NotAuthorized = 13,
+    InvalidProjectStatus = 14,
+    ClaimConditionsNotMet = 15,
 }
 
 #[contractimpl]
@@ -125,42 +128,40 @@ impl CrowdfundingContract {
         donor: Address, 
         amount: u128,
     ) -> Result<(), ContractError> {
-
         donor.require_auth();
-
         if amount == 0 {
             return Err(ContractError::AmountCannotBeZero);
         }
-
         let project_key = DataKey::Project(project_id.clone());
-        let mut project: Project = env.storage().instance().get(&project_key).ok_or(ContractError::ProjectNotFound)?;
+        let mut project_result = Self::get_project_by_id(env.clone(), project_id.clone());
 
+        let mut project = match project_result {
+            Ok(pro) => pro,
+            Err(err) => return Err(err),
+        };
         let current_time = env.ledger().timestamp();
-        if current_time > project.deadline {
-            return Err(ContractError::ProjectExpired);
-        }
+        // if current_time > project.deadline {
+        //     return Err(ContractError::ProjectExpired);
+        // }
 
         let amount_i128 = u128_to_i128(amount);
 
-        // Get the network's XLM address
-        // Create a proper soroban_sdk::String from a string literal
         let xlm_address_str = "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC";
         let xlm_address_sdk_string = soroban_sdk::String::from_str(&env, xlm_address_str);
-
-        // Now use the properly created String to create the Address
-        let xlm_token = Address::from_string(&xlm_address_sdk_string);
-        // For futurenet use: CB64D3G7SM2RTH6JSGG34DDTFTQ5CFDKVDZJZSODMCX4NJ2HV2KN7OHT
-        // For testnet use: CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC
-        // For public network use: CAS3J7GYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA
+        let xlm_token = Address::from_str(&env, "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC");
         
         let token_client = TokenClient::new(&env, &xlm_token);
+
+        if project.raised <= project.goal && project.raised + amount >= project.goal {
+            // The goal is reached with this contribution
+            project.status = ProjectStatus::GoalReached;
+        }
 
         token_client.transfer(
             &donor, 
             &env.current_contract_address(), 
             &amount_i128
         );
-
         project.raised += amount;
         env.storage().instance().set(&project_key, &project);
 
@@ -180,14 +181,71 @@ impl CrowdfundingContract {
         Ok(())
     }
 
-    pub fn claim_funds(env: Env, project_id: u32, creator: Address) {
-        // Verifica que se alcanzó la meta y que quien llama es el creador
-        // Transfiere los fondos acumulados al creador
+    pub fn claim_funds(
+        env: Env, 
+        project_id: String, 
+        creator: Address
+    ) -> Result<(), ContractError> {
+        creator.require_auth();
+        let project_key = DataKey::Project(project_id.clone());
+        let mut project_result = Self::get_project_by_id(env.clone(), project_id.clone());
+        let mut project = match project_result {
+            Ok(pro) => pro,
+            Err(err) => return Err(err),
+        };
+
+        if project.creator != creator {
+            return Err(ContractError::NotAuthorized);
+        }
+
+        if project.status != ProjectStatus::GoalReached {
+            return Err(ContractError::InvalidProjectStatus);
+        }
+
+        let current_time = env.ledger().timestamp();
+        let goal_reached = project.raised >= project.goal;
+
+        if !goal_reached {
+            return Err(ContractError::ClaimConditionsNotMet);
+        }
+
+        let xlm_address_str = "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC";
+        let xlm_address_sdk_string = soroban_sdk::String::from_str(&env, xlm_address_str);
+        let xlm_token = Address::from_str(&env, "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC");
+        let token_client = TokenClient::new(&env, &xlm_token);
+
+        let project_raised_i128 = u128_to_i128(project.raised);
+        
+        token_client.transfer(
+            &env.current_contract_address(),
+            &creator,
+            &project_raised_i128
+        );
+
+        project.status = ProjectStatus::Completed;
+
+        env.storage().instance().set(&project_id, &project);
+        
+        env.events().publish(
+            (Symbol::new(&env, "claim"), project_id),
+            project.raised
+        );
+        Ok(())
     }
 
     pub fn refund(env: Env, project_id: u32, backer: Address) {
         // Verifica que el proyecto haya fallado
         // Devuelve el aporte al backer
+    }
+
+    pub fn get_project_by_id(e: Env, project_id: String) -> Result<Project, ContractError> {
+        let project_key = DataKey::Project(project_id.clone());
+        if let Some(project) = e.storage().instance().get::<DataKey, Project>(&project_key) {
+            projects_by_project_id(&e, project_id.clone(), project.clone());
+            Ok(project)
+        } else {
+            return Err(ContractError::ProjectNotFound)
+        }
     }
     
     

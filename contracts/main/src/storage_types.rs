@@ -29,6 +29,7 @@ pub enum DataKey {
 #[contracttype]
 pub enum ProjectStatus {
     Active,
-    Successful,
+    Completed,
+    GoalReached,
     Failed
 }
